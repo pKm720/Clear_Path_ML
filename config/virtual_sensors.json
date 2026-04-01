@@ -1,0 +1,11 @@
+{
+  "virtual_sensors": [
+    {"id": "VS_EAST_01", "name": "Marathahalli Junction", "lat": 12.9566, "lng": 77.7011},
+    {"id": "VS_EAST_02", "name": "Whitefield Tech Park", "lat": 12.9698, "lng": 77.7499},
+    {"id": "VS_EAST_03", "name": "KR Puram", "lat": 13.0096, "lng": 77.6969},
+    {"id": "VS_NORTH_01", "name": "Hebbal Flyover", "lat": 13.0358, "lng": 77.5970},
+    {"id": "VS_NORTH_02", "name": "Yelahanka BEL Circle", "lat": 13.1007, "lng": 77.5963},
+    {"id": "VS_NORTH_03", "name": "Jakkur Airport Road", "lat": 13.0827, "lng": 77.6389},
+    {"id": "VS_CENTRAL_01", "name": "Indiranagar Bridge", "lat": 12.9784, "lng": 77.6408}
+  ]
+}

@@ -1,0 +1,28 @@
+# Python / ML Noise
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.venv/
+env/
+venv/
+ENV/
+
+# Data (Protecting Large CSVs)
+data/raw/*.csv
+data/processed/*.csv
+data/features/*.csv
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/features/.gitkeep
+
+# Models (Protecting binary model files)
+models/*.pkl
+models/*.joblib
+!models/.gitkeep
+
+# Environment & Sensitivity
+.env
+.env.test
+.env.production
+.DS_Store
