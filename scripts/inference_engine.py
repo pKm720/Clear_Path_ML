@@ -103,15 +103,37 @@ class InferenceEngine:
 
     def _fetch_live_physical_data(self):
         """
-        Retrieval of measurements using the /v3/locations geographic discovery endpoint.
-        This provides live readings for all physical sensors in the Bengaluru bounding box.
+        Retrieval of measurements using a tiered discovery strategy.
+        Primary: Local Backend (Port 8080) for unified context.
+        Secondary: OpenAQ v3 /locations endpoint (Internet).
+        Tertiary: Automated Simulation Mode (Mock).
         """
-        # Utilizing the proven /locations endpoint from Phase 1 for live data connectivity
+        # Tier 1: Local Backend Unification (Direct link to the Main App's database)
+        local_url = "http://127.0.0.1:8080/api/aqi/sensors"
+        try:
+            response = requests.get(local_url, timeout=2)
+            if response.status_code == 200:
+                # Filtrating for physical stations only to prevent circular feedback loops
+                results = [s for s in response.json() if not s.get('isVirtual')]
+                
+                live_data = []
+                for s in results:
+                    live_data.append({
+                        "name": s.get('stationName', 'Physical Sensor'),
+                        "lat": s.get('lat'),
+                        "lon": s.get('lng'),
+                        "value": s.get('aqi')
+                    })
+                if live_data:
+                    return live_data
+        except Exception:
+            pass # Silent failover to Tier 2 (Internet)
+
+        # Tier 2: OpenAQ v3 (Internet Discovery)
         url = f"https://api.openaq.org/v3/locations?bbox={BBOX}&limit=100"
         headers = {"X-API-Key": OPENAQ_API_KEY} if OPENAQ_API_KEY else {}
         
         try:
-            # Low timeout for a responsive real-time user experience
             response = requests.get(url, headers=headers, timeout=3)
             response.raise_for_status()
             locations = response.json().get('results', [])
@@ -120,34 +142,39 @@ class InferenceEngine:
             for loc in locations:
                 coords = loc.get('coordinates', {})
                 sensors = loc.get('sensors', [])
-                
-                # Iterate through sensors at this location to find PM2.5 data
                 for s in sensors:
                     if s.get('parameter', {}).get('name') == 'pm25':
-                        # The locations endpoint in v3 often includes a summary of the latest reading
                         latest_val = s.get('latest')
                         if latest_val is not None:
                             live_data.append({
                                 "name": loc.get('name', 'Physical Sensor'),
                                 "lat": coords.get('latitude'),
                                 "lon": coords.get('longitude'),
-                                "value": latest_val # Value is typically a floating point number here
+                                "value": latest_val
                             })
             return live_data
         except Exception as e:
             print(f"Inference Engine: Live API connectivity error ({e}). Switching to Simulation Mode.")
             return []
 
-    def get_predictions(self):
+    def get_predictions(self, physical_context=None):
         """
-        Execution of inference with automated scientific mock fallback.
+        Execution of inference with automated physical data acquisition.
+        Supports an optional 'physical_context' list to avoid circular deadlocks
+        between microservices during graph-rebuild startup.
         """
-        physical_data = self._fetch_live_physical_data()
-        data_source = "live"
-        
-        if not physical_data:
-            physical_data = self._generate_simulated_data()
-            data_source = "simulated_fallback"
+        if physical_context:
+            # Context provided directly from the request body (Push Model)
+            physical_data = physical_context
+            data_source = "provided_context"
+        else:
+            # Automated tiered discovery (Pull Model)
+            physical_data = self._fetch_live_physical_data()
+            data_source = "live"
+            
+            if not physical_data:
+                physical_data = self._generate_simulated_data()
+                data_source = "simulated_fallback"
             
         now = datetime.now()
         h, dow = now.hour, now.weekday()
@@ -181,13 +208,32 @@ class InferenceEngine:
             }])
             
             pred = self.models[vs_name].predict(features)[0]
+            final_aqi = round(max(0, float(pred)), 2)
             
+            # Phase 7: Spatial Calibration Layer
+            # Harmonization of the ML prediction with the nearest live physical station
+            is_calibrated = False
+            cal_source = None
+            
+            # Analysis of the single nearest physical sensor for local bias adjustment
+            nearest_dist, nearest_val = nearest[0]
+            if nearest_dist < 2.5: # 2.5 km Radius of Influence
+                # Exponential decay blending: closer sensors have more 'pull'
+                # alpha = 1.0 at dist=0, alpha ~ 0.1 at dist=2.5km
+                alpha = np.exp(-nearest_dist / 1.2)
+                calibrated_aqi = (1 - alpha) * final_aqi + alpha * nearest_val
+                final_aqi = round(float(calibrated_aqi), 2)
+                is_calibrated = True
+                cal_source = nearest[0][0] # Record the distance of the anchor sensor
+
             predictions.append({
                 "location": vs_name,
                 "lat": vs_lat, "lng": vs_lon,
-                "predicted_pm25": round(max(0, float(pred)), 2),
+                "predicted_pm25": final_aqi,
                 "timestamp": now.strftime("%Y-%m-%dT%H:%M:%S"),
                 "status": "virtual_sensor",
+                "is_calibrated": is_calibrated,
+                "calibration_radius_km": round(nearest_dist, 2) if is_calibrated else None,
                 "data_source": data_source
             })
             

@@ -24,6 +24,18 @@ app.add_middleware(
 # This pre-loads the 7 XGBoost models in memory during startup.
 engine = InferenceEngine()
 
+from typing import List, Optional
+from pydantic import BaseModel
+
+class SensorContext(BaseModel):
+    name: Optional[str] = None
+    lat: float
+    lon: float
+    value: float
+
+class PredictRequest(BaseModel):
+    physical_sensors: Optional[List[SensorContext]] = None
+
 @app.get("/")
 async def root():
     """
@@ -35,16 +47,22 @@ async def root():
         "virtual_sensors_monitored": len(engine.virtual_sensors)
     }
 
-@app.get("/predict")
-async def get_realtime_predictions():
+@app.post("/predict")
+async def get_realtime_predictions(request: Optional[PredictRequest] = None):
     """
     Primary endpoint for real-time air quality inference.
-    Triggers a live fetch from OpenAQ and executes XGBoost predictions.
+    Supports a 'Push' model where physical sensor context is provided in the body
+    to break circular dependencies during system startup.
     """
     try:
-        predictions = engine.get_predictions()
+        # Context extraction from the request body if present
+        context = None
+        if request and request.physical_sensors:
+            context = [s.dict() for s in request.physical_sensors]
+            
+        predictions = engine.get_predictions(physical_context=context)
         
-        if "error" in predictions:
+        if isinstance(predictions, dict) and "error" in predictions:
             raise HTTPException(status_code=503, detail=predictions["error"])
             
         return {
