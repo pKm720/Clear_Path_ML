@@ -18,7 +18,6 @@ data/features/*.csv
 
 # Models (Protecting binary model files)
 models/*.pkl
-models/*.joblib
 !models/.gitkeep
 
 # Environment & Sensitivity
