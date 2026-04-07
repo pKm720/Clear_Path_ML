@@ -10,11 +10,15 @@ app = FastAPI(
     version="1.0.0"
 )
 
+import os
+
 # Configuration of Cross-Origin Resource Sharing (CORS)
-# This allows the ClearPath web frontend to fetch live ML predictions.
+# This allows the backend node server to securely interact directly with the inferences.
+allowed_origin = os.getenv("BACKEND_URL", "*")  # Fallback to * if not set for local dev ease
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, this should be restricted to the frontend URL
+    allow_origins=[allowed_origin], # In production, set BACKEND_URL to the real backend host
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
