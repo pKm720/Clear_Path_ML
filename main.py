@@ -77,5 +77,5 @@ async def get_realtime_predictions(request: Optional[PredictRequest] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    # Launching the server on port 8000
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Launching the server on port 10000
+    uvicorn.run(app, host="127.0.0.1", port=10000)
